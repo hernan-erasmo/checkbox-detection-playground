@@ -2,3 +2,6 @@ bin/
 include/
 lib/
 pyvenv.cfg
+**/.DS_Store
+*.png
+!0-input.png
