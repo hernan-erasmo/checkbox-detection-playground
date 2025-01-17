@@ -16,7 +16,7 @@ def process_image(image_path, output_path, debug_mode: bool = False):
         cv2.imwrite("3-process-image-edges.png", edges)
 
     print("process_image - Finding contours")
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if debug_mode:
         contour_image = cv2.drawContours(image.copy(), contours, -1, (0, 255, 0), 3)
         cv2.imwrite("4-process-image-contours.png", contour_image)
