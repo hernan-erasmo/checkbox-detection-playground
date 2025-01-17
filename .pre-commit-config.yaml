@@ -1,0 +1,14 @@
+repos:
+-   repo: https://github.com/psf/black
+    rev: 24.2.0
+    hooks:
+    -   id: black
+        types: [python]
+        files: ^src/
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.2.2
+    hooks:
+    -   id: ruff
+        types: [python]
+        files: ^src/
+        args: [--fix, --exit-non-zero-on-fix]
