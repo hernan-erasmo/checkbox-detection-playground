@@ -36,14 +36,19 @@ def get_random_text_position(x, y, w, h, img_width, img_height):
 
 
 def process_image(image_path, output_path, debug_mode: bool = False):
+    # https://stackoverflow.com/a/55767996
+    # 1. Obtain binary image.
+    #   Load the image, grayscale, Gaussian blur, and Otsu's threshold to obtain a binary black/white image.
     print("process_image - Loading the image")
     image = cv2.imread(image_path)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Gaussian blur
+    blur = cv2.GaussianBlur(gray, (3, 3), 0)  # TODO (test with 3,3 or 7,7)
+    _ret, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     if debug_mode:
-        cv2.imwrite("1-process-image-gray.png", gray)
+        cv2.imwrite("1-process-image-gray.png", otsu)
 
     print("process_image - Preprocessing the image")
-    _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(otsu, 128, 255, cv2.THRESH_BINARY_INV)
     edges = cv2.Canny(binary, 50, 150)
     if debug_mode:
         cv2.imwrite("2-process-image-binary.png", binary)
