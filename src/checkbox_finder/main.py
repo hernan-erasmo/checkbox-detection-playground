@@ -1,3 +1,5 @@
+import random
+
 import cv2
 
 
@@ -8,6 +10,29 @@ HUMAN_EYE_RESULTS = {
 }
 RED = (0, 0, 255)
 GREEN = (0, 255, 0)
+
+
+def get_random_text_position(x, y, w, h, img_width, img_height):
+    # 8 possible positions around the box
+    positions = [
+        (x - w, y - h),  # top left
+        (x + w // 2, y - h),  # top center
+        (x + w, y - h),  # top right
+        (x - w, y + h // 2),  # middle left
+        (x + w, y + h // 2),  # middle right
+        (x - w, y + h),  # bottom left
+        (x + w // 2, y + h),  # bottom center
+        (x + w, y + h),  # bottom right
+    ]
+
+    # Filter positions that would go outside image bounds
+    valid_positions = [
+        (px, py)
+        for px, py in positions
+        if 0 <= px <= img_width - 120 and 0 <= py <= img_height - 30
+    ]
+
+    return random.choice(valid_positions) if valid_positions else (x, y - 30)
 
 
 def process_image(image_path, output_path, debug_mode: bool = False):
@@ -30,12 +55,17 @@ def process_image(image_path, output_path, debug_mode: bool = False):
         contour_image = cv2.drawContours(image.copy(), contours, -1, (0, 255, 0), 3)
         cv2.imwrite("4-process-image-contours.png", contour_image)
 
+    # Create debug image with size annotations
+    if debug_mode:
+        debug_image = image.copy()
+
     print(f"process_image - Found {len(contours)} contours")
     algorithm_results = {
         "checkbox_count": 0,
         "checked": 0,
         "unchecked": 0,
     }
+    visible_count = 0
     for idx, contour in enumerate(contours):
         contour_debug_prefix = f"{idx+1}/{len(contours)} -"
         print(f"{contour_debug_prefix} Approximating to polygon")
@@ -45,16 +75,47 @@ def process_image(image_path, output_path, debug_mode: bool = False):
         if len(approx) == 4 and cv2.isContourConvex(approx):
             x, y, w, h = cv2.boundingRect(approx)
             aspect_ratio = w / float(h)
+            area = w * h
+
+            # Size-based filtering
+            MIN_AREA = 100  # minimum pixel area
+            MAX_AREA = 2500  # maximum pixel area
 
             # TODO: Fine-tune size/aspect ratio for checkboxes
-            if 0.9 <= aspect_ratio <= 1.1 and 10 <= w <= 50:
+            if 0.9 <= aspect_ratio <= 1.1 and MIN_AREA <= area <= MAX_AREA:
                 # At this point, we consider the contour a checkbox
+                visible_count += 1
                 algorithm_results["checkbox_count"] += 1
 
                 # Analyze the fill density inside the rectangle
                 print(f"{contour_debug_prefix} Analyzing fill density of rectangle")
                 roi = binary[y : y + h, x : x + w]
-                fill_ratio = cv2.countNonZero(roi) / (w * h)
+                fill_ratio = cv2.countNonZero(roi) / area
+
+                if debug_mode:
+                    height, width = debug_image.shape[:2]
+                    text_x, text_y = get_random_text_position(x, y, w, h, width, height)
+
+                    # White background for text visibility
+                    cv2.rectangle(
+                        debug_image,
+                        (text_x, text_y),
+                        (text_x + 120, text_y + 25),
+                        (0, 255, 255),
+                        -1,
+                    )
+
+                    # Text with box number and fill ratio
+                    text = f"#{visible_count} ({fill_ratio:.2f})"
+                    cv2.putText(
+                        debug_image,
+                        text,
+                        (text_x + 5, text_y + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (255, 0, 0),
+                        2,
+                    )
 
                 print(f"{contour_debug_prefix} Classifying as filled or unfilled")
                 # TODO: Optimize fill ratio threshold
@@ -69,6 +130,8 @@ def process_image(image_path, output_path, debug_mode: bool = False):
                     algorithm_results["checked"] += 1
                 elif color == RED:
                     algorithm_results["unchecked"] += 1
+    if debug_mode:
+        cv2.imwrite("5-debug_sizes.png", debug_image)
 
     # Save the output image
     print("process_image - Saving the output image")
