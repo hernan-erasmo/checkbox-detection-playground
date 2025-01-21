@@ -12,9 +12,7 @@ GREEN = (0, 255, 0)
 
 
 def convert_to_grayscale(image: MatLike, debug_mode: bool = False) -> MatLike:
-    """
-    Convert to grayscale with enhanced line detection
-    """
+    """Convert to grayscale with enhanced line detection"""
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -31,15 +29,37 @@ def convert_to_grayscale(image: MatLike, debug_mode: bool = False) -> MatLike:
         13,  # Optimal block size
         3,  # Optimal C value
     )
+
     if debug_mode:
         cv2.imwrite("1a-sharpened.png", sharpened)
         cv2.imwrite("1b-adaptive-thresh.png", thresh)
+
     return thresh
+
+
+def calculate_overlap(box1, box2):
+    """Calculate IoU (Intersection over Union) of two boxes"""
+    x1, y1, w1, h1 = box1
+    x2, y2, w2, h2 = box2
+
+    # Calculate intersection
+    x_left = max(x1, x2)
+    y_top = max(y1, y2)
+    x_right = min(x1 + w1, x2 + w2)
+    y_bottom = min(y1 + h1, y2 + h2)
+
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    intersection = (x_right - x_left) * (y_bottom - y_top)
+    box1_area = w1 * h1
+    box2_area = w2 * h2
+
+    return intersection / float(box1_area + box2_area - intersection)
 
 
 def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
     """Detect potential checkbox contours from thresholded image"""
-
     if debug_mode:
         cv2.imwrite("2a-thresh-input.png", thresh)
 
@@ -48,38 +68,64 @@ def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
         thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
     )
 
-    # Process and filter contours
-    checkbox_contours = []
-    debug_filtered = cv2.cvtColor(thresh.copy(), cv2.COLOR_GRAY2BGR)
-
+    # Store candidates with their properties
+    candidates = []
     for contour in contours:
-        # Approximate polygon
         peri = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, 0.04 * peri, True)
 
-        # Get bounding box
-        x, y, w, h = cv2.boundingRect(approx)
-        aspect_ratio = w / float(h)
-        area = cv2.contourArea(contour)
+        if len(approx) == 4:
+            x, y, w, h = cv2.boundingRect(approx)
+            aspect_ratio = w / float(h)
+            area = cv2.contourArea(contour)
 
-        # Filter for squares
-        if len(approx) == 4 and 0.8 <= aspect_ratio <= 1.2 and 100 <= area <= 2500:
-            checkbox_contours.append(contour)
-            if debug_mode:
-                cv2.drawContours(debug_filtered, [contour], -1, (0, 255, 0), 2)
-                cv2.putText(
-                    debug_filtered,
-                    f"AR:{aspect_ratio:.2f} A:{area:.0f}",
-                    (x, y - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 0),
-                    1,
+            if 0.8 <= aspect_ratio <= 1.2 and 100 <= area <= 2500:
+                candidates.append(
+                    {
+                        "contour": contour,
+                        "box": (x, y, w, h),
+                        "aspect_ratio": abs(
+                            1 - aspect_ratio
+                        ),  # Distance from perfect square
+                        "area": area,
+                    }
                 )
+
+    # Remove overlapping boxes
+    final_candidates = []
+    while candidates:
+        best = candidates.pop(0)
+
+        # Remove any remaining candidates that overlap significantly with best
+        candidates = [
+            c
+            for c in candidates
+            if calculate_overlap(best["box"], c["box"])
+            < 0.3  # Adjust threshold as needed
+        ]
+
+        final_candidates.append(best)
+
+    # Debug visualization
     if debug_mode:
+        debug_filtered = cv2.cvtColor(thresh.copy(), cv2.COLOR_GRAY2BGR)
+        for idx, candidate in enumerate(final_candidates):
+            contour = candidate["contour"]
+            x, y, w, h = candidate["box"]
+            cv2.drawContours(debug_filtered, [contour], -1, (0, 255, 0), 2)
+            cv2.putText(
+                debug_filtered,
+                f"#{idx}",
+                (x, y - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                1,
+            )
         cv2.imwrite("2b-contours-filtered.png", debug_filtered)
-        print(f"Found {len(checkbox_contours)} potential checkboxes")
-    return checkbox_contours
+        print(f"Found {len(final_candidates)} unique checkboxes")
+
+    return [c["contour"] for c in final_candidates]
 
 
 def process_image(image_path: str, output_path: str, debug_mode: bool = False):
