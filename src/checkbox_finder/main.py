@@ -13,95 +13,72 @@ GREEN = (0, 255, 0)
 
 def convert_to_grayscale(image: MatLike, debug_mode: bool = False) -> MatLike:
     """
-    Convert to grayscale, Gaussian blur, Otsu's threshold
+    Convert to grayscale with enhanced line detection
     """
+    # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+    # Apply unsharp masking for sharpening
+    gaussian = cv2.GaussianBlur(gray, (5, 5), 1.5)
+    sharpened = cv2.addWeighted(gray, 2.2, gaussian, -1.2, 0)
+
+    # Optimized adaptive threshold parameters
+    thresh = cv2.adaptiveThreshold(
+        sharpened,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        13,  # Optimal block size
+        3,  # Optimal C value
+    )
     if debug_mode:
-        cv2.imwrite("1-converted-to-grayscale.png", thresh)
+        cv2.imwrite("1a-sharpened.png", sharpened)
+        cv2.imwrite("1b-adaptive-thresh.png", thresh)
     return thresh
 
 
-def find_contours(processed_image: MatLike, debug_mode: bool = False) -> list:
-    """
-    Find contours and filter using contour area filtering to remove noise
-    """
-    cnts, _ = cv2.findContours(processed_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[
-        -2:
-    ]
-    AREA_THRESHOLD = 100
-    contours_under_threshold = []
-    for c in cnts:
-        area = cv2.contourArea(c)
-        if area < AREA_THRESHOLD:
-            contours_under_threshold.append(c)
-            cv2.drawContours(processed_image, [c], -1, 0, -1)
+def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
+    """Detect potential checkbox contours from thresholded image"""
+
     if debug_mode:
-        print(
-            f"step 2) contours found / under_threshold: {len(cnts)}/{len(contours_under_threshold)}"
-        )
-        cv2.imwrite("2-found-contours.png", processed_image)
-    return contours_under_threshold
+        cv2.imwrite("2a-thresh-input.png", thresh)
 
-
-def repair_image(processed_image: MatLike, debug_mode: bool = False) -> MatLike:
-    """
-    Repair checkbox horizontal and vertical walls
-    """
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
-    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 5))
-    repaired_horizontal = cv2.morphologyEx(
-        processed_image, cv2.MORPH_CLOSE, horizontal_kernel, iterations=1
+    # Find contours using TREE mode
+    contours, _ = cv2.findContours(
+        thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
     )
-    repaired_vertical = cv2.morphologyEx(
-        repaired_horizontal, cv2.MORPH_CLOSE, vertical_kernel, iterations=1
-    )
-    if debug_mode:
-        cv2.imwrite("3-repaired-image.png", repaired_vertical)
-    return repaired_vertical
 
-
-def find_checkboxes_from_image(
-    repaired_image: MatLike, debug_mode: bool = False
-) -> list:
-    """
-    Detect checkboxes using shape approximation and aspect ratio filtering
-    """
+    # Process and filter contours
     checkbox_contours = []
-    cnts, _ = cv2.findContours(
-        repaired_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )[-2:]
-    for c in cnts:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.035 * peri, True)
+    debug_filtered = cv2.cvtColor(thresh.copy(), cv2.COLOR_GRAY2BGR)
+
+    for contour in contours:
+        # Approximate polygon
+        peri = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.04 * peri, True)
+
+        # Get bounding box
         x, y, w, h = cv2.boundingRect(approx)
         aspect_ratio = w / float(h)
-        if len(approx) == 4 and (aspect_ratio >= 0.8 and aspect_ratio <= 1.2):
-            checkbox_contours.append(c)
-    if debug_mode:
-        print(
-            f"step 4-repaired) iterated over {len(cnts)} contours, found {len(checkbox_contours)} checkboxes"
-        )
-    return checkbox_contours
+        area = cv2.contourArea(contour)
 
-
-def find_checkboxes_from_contours(contours: list, debug_mode: bool = False) -> list:
-    """
-    Detect checkboxes using shape approximation and aspect ratio filtering
-    """
-    checkbox_contours = []
-    for c in contours:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.035 * peri, True)
-        x, y, w, h = cv2.boundingRect(approx)
-        aspect_ratio = w / float(h)
-        if len(approx) == 4 and (aspect_ratio >= 0.8 and aspect_ratio <= 1.2):
-            checkbox_contours.append(c)
+        # Filter for squares
+        if len(approx) == 4 and 0.8 <= aspect_ratio <= 1.2 and 100 <= area <= 2500:
+            checkbox_contours.append(contour)
+            if debug_mode:
+                cv2.drawContours(debug_filtered, [contour], -1, (0, 255, 0), 2)
+                cv2.putText(
+                    debug_filtered,
+                    f"AR:{aspect_ratio:.2f} A:{area:.0f}",
+                    (x, y - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    1,
+                )
     if debug_mode:
-        print(
-            f"step 4-contours) iterated over {len(contours)} contours, found {len(checkbox_contours)} checkboxes"
-        )
+        cv2.imwrite("2b-contours-filtered.png", debug_filtered)
+        print(f"Found {len(checkbox_contours)} potential checkboxes")
     return checkbox_contours
 
 
@@ -113,33 +90,35 @@ def process_image(image_path: str, output_path: str, debug_mode: bool = False):
 
     # Load image
     image = cv2.imread(image_path)
-    results_from_repaired = image.copy()
-    results_from_contours = image.copy()
+    _results = image.copy()
+    # results_from_repaired = image.copy()
+    # results_from_contours = image.copy()
 
     # Step 1
     thresh = convert_to_grayscale(image, debug_mode)
 
     # Step 2
-    cnts = find_contours(thresh, debug_mode)
+    _cnts = detect_checkbox_contours(thresh, debug_mode)
+    # cnts = find_contours(thresh, debug_mode)
 
     # Step 3
-    repaired_image = repair_image(thresh, debug_mode)
+    # repaired_image = repair_image(thresh, debug_mode)
 
     # Step 4
-    checkboxes_from_image = find_checkboxes_from_image(repaired_image, debug_mode)
-    checkboxes_from_contours = find_checkboxes_from_contours(cnts, debug_mode)
+    # checkboxes_from_image = find_checkboxes_from_image(repaired_image, debug_mode)
+    # checkboxes_from_contours = find_checkboxes_from_contours(cnts, debug_mode)
 
     # Step 5 (print results from repaired)
-    for check in checkboxes_from_image:
-        x, y, w, h = cv2.boundingRect(check)
-        cv2.rectangle(results_from_repaired, (x, y), (x + w, y + h), (36, 255, 12), 3)
-    cv2.imwrite("9-output-with-repaired.png", results_from_repaired)
+    # for check in checkboxes_from_image:
+    #    x, y, w, h = cv2.boundingRect(check)
+    #    cv2.rectangle(results_from_repaired, (x, y), (x + w, y + h), (36, 255, 12), 3)
+    # cv2.imwrite("9-output-with-repaired.png", results_from_repaired)
 
     # Step 5 (print results from contours)
-    for check in checkboxes_from_contours:
-        x, y, w, h = cv2.boundingRect(check)
-        cv2.rectangle(results_from_contours, (x, y), (x + w, y + h), (36, 255, 12), 3)
-    cv2.imwrite("9-output-with-contours.png", results_from_contours)
+    # for check in checkboxes_from_contours:
+    #    x, y, w, h = cv2.boundingRect(check)
+    #    cv2.rectangle(results_from_contours, (x, y), (x + w, y + h), (36, 255, 12), 3)
+    # cv2.imwrite("9-output-with-contours.png", results_from_contours)
 
 
 if __name__ == "__main__":
