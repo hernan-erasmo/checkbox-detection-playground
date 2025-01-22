@@ -1,3 +1,6 @@
+import argparse
+from pathlib import Path
+
 import cv2
 from cv2.typing import MatLike
 
@@ -199,8 +202,22 @@ def process_image(image_path: str, output_path: str, debug_mode: bool = False):
     _categories = categorize_checkboxes(image, _cnts, debug_mode)
 
 
+def get_default_output_path(input_path: str) -> str:
+    """Generate default output path by adding '-processed' suffix"""
+    input_path = Path(input_path)
+    return str(input_path.parent / f"{input_path.stem}-processed{input_path.suffix}")
+
+
 if __name__ == "__main__":
-    input_path = "0-input.webp"  # Replace with your input file path
-    output_path = "9-output.png"
-    debugging_enabled = True
-    process_image(input_path, output_path, debugging_enabled)
+    parser = argparse.ArgumentParser(description="Detect checkboxes in an image")
+    parser.add_argument("-i", "--input", required=True, help="Path to input image file")
+    parser.add_argument(
+        "-o",
+        "--output",
+        required=False,
+        help='Path to output image file. If not provided, uses input filename with "-processed" suffix',
+    )
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug mode")
+    args = parser.parse_args()
+    output_path = args.output if args.output else get_default_output_path(args.input)
+    process_image(args.input, output_path, args.debug)
