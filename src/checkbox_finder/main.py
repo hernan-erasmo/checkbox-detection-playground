@@ -187,19 +187,27 @@ def process_image(image_path: str, output_path: str, debug_mode: bool = False):
     This is the main function, inspired by an algorithm described at
     https://stackoverflow.com/a/55767996
     """
-
-    # Load image
     image = cv2.imread(image_path)
-    _results = image.copy()
+    result_image = image.copy()
 
-    # Step 1
+    # Step 1: Convert to grayscale and threshold
     thresh = convert_to_grayscale(image, debug_mode)
 
-    # Step 2
-    _cnts = detect_checkbox_contours(thresh, debug_mode)
+    # Step 2: Detect checkbox contours
+    contours = detect_checkbox_contours(thresh, debug_mode)
 
-    # Step 3
-    _categories = categorize_checkboxes(image, _cnts, debug_mode)
+    # Step 3: Categorize checkboxes
+    categories = categorize_checkboxes(image, contours, debug_mode)
+
+    # Step 4: Draw final results
+    for contour in categories["checked"]:
+        cv2.drawContours(result_image, [contour], -1, RED, 2)
+
+    for contour in categories["unchecked"]:
+        cv2.drawContours(result_image, [contour], -1, GREEN, 2)
+
+    # Write final image
+    cv2.imwrite(output_path, result_image)
 
 
 def get_default_output_path(input_path: str) -> str:
