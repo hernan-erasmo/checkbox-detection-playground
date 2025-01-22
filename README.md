@@ -54,8 +54,8 @@ python src/checkbox_finder/main.py -i 0-input.webp -d
 
 When debug mode is enabled (`-d`), the script generates additional output files:
 
-- 1a-sharpened.png: Sharpened grayscale image
-- 1b-adaptive-thresh.png: Thresholded binary image
-- 2a-thresh-input.png: Input for contour detection
-- 2b-contours-filtered.png: Detected checkbox contours
-- 3-categorized-checkboxes.png: Final categorization results
+- `1a-sharpened.png`: Sharpened grayscale image
+- `1b-adaptive-thresh.png`: Thresholded binary image
+- `2a-thresh-input.png`: Input for contour detection
+- `2b-contours-filtered.png`: Detected checkbox contours
+- `3-categorized-checkboxes.png`: Final categorization results
