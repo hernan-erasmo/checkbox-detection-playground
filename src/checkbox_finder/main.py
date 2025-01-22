@@ -128,43 +128,75 @@ def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
     return [c["contour"] for c in final_candidates]
 
 
+def categorize_checkboxes(
+    image: MatLike, contours: list, debug_mode: bool = False
+) -> dict:
+    """Categorize checkboxes as checked or unchecked based on internal pixel density"""
+
+    # Convert to grayscale for analysis
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    results = {"checked": [], "unchecked": []}
+
+    if debug_mode:
+        debug_img = image.copy()
+
+    for idx, contour in enumerate(contours):
+        # Get bounding box
+        x, y, w, h = cv2.boundingRect(contour)
+
+        # Extract ROI (Region of Interest)
+        roi = gray[y : y + h, x : x + w]
+
+        # Calculate fill density
+        total_pixels = roi.shape[0] * roi.shape[1]
+        dark_pixels = total_pixels - cv2.countNonZero(roi)
+        fill_ratio = dark_pixels / total_pixels
+
+        # Classify based on fill ratio
+        if fill_ratio > 0.025:  # Threshold can be adjusted
+            results["checked"].append(contour)
+            color = RED
+        else:
+            results["unchecked"].append(contour)
+            color = GREEN
+        if debug_mode:
+            cv2.drawContours(debug_img, [contour], -1, color, 2)
+            cv2.putText(
+                debug_img,
+                f"#{idx} ({fill_ratio:.2f})",
+                (x, y - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+            )
+    if debug_mode:
+        cv2.imwrite("3-categorized-checkboxes.png", debug_img)
+        print(
+            f"Found {len(results['checked'])} checked and {len(results['unchecked'])} unchecked boxes"
+        )
+    return results
+
+
 def process_image(image_path: str, output_path: str, debug_mode: bool = False):
     """
-    This is the main function, and it follows the steps of an algorithm described
-    at https://stackoverflow.com/a/55767996
+    This is the main function, inspired by an algorithm described at
+    https://stackoverflow.com/a/55767996
     """
 
     # Load image
     image = cv2.imread(image_path)
     _results = image.copy()
-    # results_from_repaired = image.copy()
-    # results_from_contours = image.copy()
 
     # Step 1
     thresh = convert_to_grayscale(image, debug_mode)
 
     # Step 2
     _cnts = detect_checkbox_contours(thresh, debug_mode)
-    # cnts = find_contours(thresh, debug_mode)
 
     # Step 3
-    # repaired_image = repair_image(thresh, debug_mode)
-
-    # Step 4
-    # checkboxes_from_image = find_checkboxes_from_image(repaired_image, debug_mode)
-    # checkboxes_from_contours = find_checkboxes_from_contours(cnts, debug_mode)
-
-    # Step 5 (print results from repaired)
-    # for check in checkboxes_from_image:
-    #    x, y, w, h = cv2.boundingRect(check)
-    #    cv2.rectangle(results_from_repaired, (x, y), (x + w, y + h), (36, 255, 12), 3)
-    # cv2.imwrite("9-output-with-repaired.png", results_from_repaired)
-
-    # Step 5 (print results from contours)
-    # for check in checkboxes_from_contours:
-    #    x, y, w, h = cv2.boundingRect(check)
-    #    cv2.rectangle(results_from_contours, (x, y), (x + w, y + h), (36, 255, 12), 3)
-    # cv2.imwrite("9-output-with-contours.png", results_from_contours)
+    _categories = categorize_checkboxes(image, _cnts, debug_mode)
 
 
 if __name__ == "__main__":
