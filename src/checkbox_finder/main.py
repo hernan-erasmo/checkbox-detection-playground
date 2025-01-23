@@ -1,9 +1,22 @@
 import argparse
+import logging
 from pathlib import Path
 
 import cv2
 from cv2.typing import MatLike
 
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Format
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 HUMAN_EYE_RESULTS = {
     "checkbox_count": 42,
@@ -16,12 +29,16 @@ GREEN = (0, 255, 0)
 
 def convert_to_grayscale(image: MatLike, debug_mode: bool = False) -> MatLike:
     """Convert to grayscale with enhanced line detection"""
+    logger.debug("Starting grayscale conversion")
+
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    logger.debug("Image converted to grayscale")
 
     # Apply unsharp masking for sharpening
     gaussian = cv2.GaussianBlur(gray, (5, 5), 1.5)
     sharpened = cv2.addWeighted(gray, 2.2, gaussian, -1.2, 0)
+    logger.debug("Applied unsharp masking")
 
     # Optimized adaptive threshold parameters
     thresh = cv2.adaptiveThreshold(
@@ -32,10 +49,12 @@ def convert_to_grayscale(image: MatLike, debug_mode: bool = False) -> MatLike:
         13,  # Optimal block size
         3,  # Optimal C value
     )
+    logger.debug("Applied adaptive threshold")
 
     if debug_mode:
         cv2.imwrite("1a-sharpened.png", sharpened)
         cv2.imwrite("1b-adaptive-thresh.png", thresh)
+        logger.debug("Saved debug images for grayscale conversion")
 
     return thresh
 
@@ -63,6 +82,8 @@ def calculate_overlap(box1, box2):
 
 def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
     """Detect potential checkbox contours from thresholded image"""
+    logger.info("Starting checkbox contour detection")
+
     if debug_mode:
         cv2.imwrite("2a-thresh-input.png", thresh)
 
@@ -70,6 +91,7 @@ def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
     contours, _ = cv2.findContours(
         thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
     )
+    logger.debug(f"Found {len(contours)} initial contours")
 
     # Store candidates with their properties
     candidates = []
@@ -87,12 +109,13 @@ def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
                     {
                         "contour": contour,
                         "box": (x, y, w, h),
-                        "aspect_ratio": abs(
-                            1 - aspect_ratio
-                        ),  # Distance from perfect square
+                        "aspect_ratio": abs(1 - aspect_ratio),
                         "area": area,
                     }
                 )
+                logger.debug(f"Found candidate: AR={aspect_ratio:.2f}, Area={area}")
+
+    logger.info(f"Found {len(candidates)} potential candidates")
 
     # Remove overlapping boxes
     final_candidates = []
@@ -101,10 +124,7 @@ def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
 
         # Remove any remaining candidates that overlap significantly with best
         candidates = [
-            c
-            for c in candidates
-            if calculate_overlap(best["box"], c["box"])
-            < 0.3  # Adjust threshold as needed
+            c for c in candidates if calculate_overlap(best["box"], c["box"]) < 0.3
         ]
 
         final_candidates.append(best)
@@ -126,7 +146,7 @@ def detect_checkbox_contours(thresh: MatLike, debug_mode: bool = False) -> list:
                 1,
             )
         cv2.imwrite("2b-contours-filtered.png", debug_filtered)
-        print(f"Found {len(final_candidates)} unique checkboxes")
+        logger.info(f"Found {len(final_candidates)} unique checkboxes")
 
     return [c["contour"] for c in final_candidates]
 
@@ -135,10 +155,10 @@ def categorize_checkboxes(
     image: MatLike, contours: list, debug_mode: bool = False
 ) -> dict:
     """Categorize checkboxes as checked or unchecked based on internal pixel density"""
+    logger.info("Starting checkbox categorization")
 
     # Convert to grayscale for analysis
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
     results = {"checked": [], "unchecked": []}
 
     if debug_mode:
@@ -157,12 +177,19 @@ def categorize_checkboxes(
         fill_ratio = dark_pixels / total_pixels
 
         # Classify based on fill ratio
-        if fill_ratio > 0.025:  # Threshold can be adjusted
+        if fill_ratio > 0.025:
             results["checked"].append(contour)
             color = RED
+            logger.debug(
+                f"Checkbox #{idx} classified as checked (fill ratio: {fill_ratio:.3f})"
+            )
         else:
             results["unchecked"].append(contour)
             color = GREEN
+            logger.debug(
+                f"Checkbox #{idx} classified as unchecked (fill ratio: {fill_ratio:.3f})"
+            )
+
         if debug_mode:
             cv2.drawContours(debug_img, [contour], -1, color, 2)
             cv2.putText(
@@ -174,20 +201,25 @@ def categorize_checkboxes(
                 color,
                 1,
             )
+
     if debug_mode:
         cv2.imwrite("3-categorized-checkboxes.png", debug_img)
-        print(
+        logger.info(
             f"Found {len(results['checked'])} checked and {len(results['unchecked'])} unchecked boxes"
         )
+
     return results
 
 
 def process_image(image_path: str, output_path: str, debug_mode: bool = False):
-    """
-    This is the main function, inspired by an algorithm described at
-    https://stackoverflow.com/a/55767996
-    """
+    """Process form image and highlight checkboxes"""
+    logger.info(f"Processing image: {image_path}")
+
     image = cv2.imread(image_path)
+    if image is None:
+        logger.error(f"Failed to load image: {image_path}")
+        return
+
     result_image = image.copy()
 
     # Step 1: Convert to grayscale and threshold
@@ -208,6 +240,7 @@ def process_image(image_path: str, output_path: str, debug_mode: bool = False):
 
     # Write final image
     cv2.imwrite(output_path, result_image)
+    logger.info(f"Processed image saved to: {output_path}")
 
 
 def get_default_output_path(input_path: str) -> str:
@@ -227,5 +260,15 @@ if __name__ == "__main__":
     )
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
-    output_path = args.output if args.output else get_default_output_path(args.input)
-    process_image(args.input, output_path, args.debug)
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
+
+    try:
+        output_path = (
+            args.output if args.output else get_default_output_path(args.input)
+        )
+        process_image(args.input, output_path, args.debug)
+    except Exception as e:
+        logger.error(f"Error processing image: {str(e)}")
