@@ -5,24 +5,25 @@ from pathlib import Path
 import cv2
 from cv2.typing import MatLike
 
-# Configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
+# TODO: used console for development, but should be replaced with a file handler or a logging service
+# for production use
+log_handler = logging.StreamHandler()
+log_handler.setLevel(logging.INFO)
 
-# Format
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+log_handler.setFormatter(formatter)
+logger.addHandler(log_handler)
 
+# Only used as sanity check, left here for reference.
 HUMAN_EYE_RESULTS = {
     "checkbox_count": 42,
     "checked": 16,
     "unchecked": 26,
 }
+
 RED = (0, 0, 255)
 GREEN = (0, 255, 0)
 
@@ -211,6 +212,12 @@ def categorize_checkboxes(
     return results
 
 
+def get_default_output_path(input_path: str) -> str:
+    """Generate default output path by adding '-processed' suffix"""
+    input_path = Path(input_path)
+    return str(input_path.parent / f"{input_path.stem}-processed{input_path.suffix}")
+
+
 def process_image(image_path: str, output_path: str, debug_mode: bool = False):
     """Process form image and highlight checkboxes"""
     logger.info(f"Processing image: {image_path}")
@@ -243,12 +250,6 @@ def process_image(image_path: str, output_path: str, debug_mode: bool = False):
     logger.info(f"Processed image saved to: {output_path}")
 
 
-def get_default_output_path(input_path: str) -> str:
-    """Generate default output path by adding '-processed' suffix"""
-    input_path = Path(input_path)
-    return str(input_path.parent / f"{input_path.stem}-processed{input_path.suffix}")
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detect checkboxes in an image")
     parser.add_argument("-i", "--input", required=True, help="Path to input image file")
@@ -263,7 +264,7 @@ if __name__ == "__main__":
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
-        console_handler.setLevel(logging.DEBUG)
+        log_handler.setLevel(logging.DEBUG)
 
     try:
         output_path = (
