@@ -270,6 +270,9 @@ if __name__ == "__main__":
         output_path = (
             args.output if args.output else get_default_output_path(args.input)
         )
+        logger.info(
+            "Starting checkbox detection process. Library loading can take a while if this is the first run"
+        )
         process_image(args.input, output_path, args.debug)
     except Exception as e:
         logger.error(f"Error processing image: {str(e)}")
