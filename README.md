@@ -8,10 +8,10 @@ Move to a separate document, [here](./design_choices.md)
 
 ## Installation
 
-1. Clone the repository:
+1. Unzip the file into a dir and `cd` into it:
 ```bash
-git clone <repository-url>
-cd checkbox-detection-playground
+unzip hernan-erasmo-checkbox-detection
+cd hernan-erasmo-checkbox-detection
 ```
 
 2. Create and activate virtual environment:
