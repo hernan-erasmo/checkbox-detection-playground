@@ -2,6 +2,10 @@
 
 A Python script that detects and categorizes checkboxes in form images, highlighting checked and unchecked boxes.
 
+## Design decisions, TODOs, and Afterthoughts
+
+Move to a separate document, [here](./design_choices.md)
+
 ## Installation
 
 1. Clone the repository:
