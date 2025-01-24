@@ -5,7 +5,11 @@ from pathlib import Path
 import cv2
 from cv2.typing import MatLike
 
-logger = logging.getLogger(__name__)
+print(
+    "Starting checkbox detection process. First run might take longer while loading libraries..."
+)
+
+logger = logging.getLogger("checkbox-detection")
 logger.setLevel(logging.INFO)
 
 # TODO: used console for development, but should be replaced with a file handler or a logging service
@@ -269,9 +273,6 @@ if __name__ == "__main__":
     try:
         output_path = (
             args.output if args.output else get_default_output_path(args.input)
-        )
-        logger.info(
-            "Starting checkbox detection process. Library loading can take a while if this is the first run"
         )
         process_image(args.input, output_path, args.debug)
     except Exception as e:
